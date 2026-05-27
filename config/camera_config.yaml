@@ -1,0 +1,97 @@
+---
+# Camera Configuration for Back Cover Fault Detection
+# Optimized for detecting scratches 0.1mm on dark silicone at 30 pieces/minute
+
+# Camera Settings
+camera:
+  resolution:
+    width: 2048
+    height: 2048
+  fps: 60
+  exposure: 5000  # microseconds - adjust for lighting
+  gain: 200  # analog gain - increase for dark surfaces
+  white_balance_mode: manual
+  white_balance_temp: 6500  # Kelvin
+
+# Lighting Configuration
+lighting:
+  type: "dome_light_with_low_angle_ring"
+  dome_light:
+    intensity: 100  # percentage
+    angle: 45  # degrees from horizontal
+  ring_light:
+    intensity: 80  # percentage
+    angle: 25  # degrees - creates shadow on scratches
+  purpose: "Create white shadows on scratches for high contrast"
+
+# Sensor & Trigger Settings
+sensor:
+  type: "laser_tripwire"
+  trigger_mode: "rising_edge"
+  debounce_ms: 50
+  capture_delay_ms: 100  # delay after trigger to let part settle
+  pieces_per_minute: 30
+  estimated_cycle_time_ms: 2000
+
+# Pixel to Physical Distance Mapping
+calibration:
+  description: "Calibrate using a reference ruler under actual lighting"
+  pixels_per_mm: 20  # 1 pixel = 0.05mm (adjust based on your camera lens)
+  min_defect_threshold_mm: 0.1
+  min_defect_threshold_pixels: 2  # 0.1mm * 20 pixels/mm
+  
+# Image Processing Pipeline
+image_processing:
+  roi_extraction:
+    method: "contour_detection"
+    color_space: "grayscale"
+    target_shape: "rectangle"
+    padding_percent: 10  # add 10% padding around detected part
+    
+  contrast_enhancement:
+    method: "histogram_stretching"
+    percentile_low: 10  # darkest 10% becomes pure black
+    percentile_high: 90  # brightest 10% becomes pure white
+    
+  blur_and_subtract:
+    enabled: true
+    blur_kernel_size: 25  # kernel size for gaussian blur
+    purpose: "Remove silicone grain texture, preserve scratch lines"
+    
+  defect_detection:
+    method: "image_subtraction"
+    reference_image: "golden_image.jpg"
+    alignment_enabled: true
+    alignment_max_shift_pixels: 20  # ±5mm tolerance
+    pixel_difference_threshold: 50  # 0-255 scale
+    
+# Quality Control Rules
+quality_control:
+  rejection_criteria:
+    - type: "scratch_detected"
+      length_mm: 0.1
+      count: 1  # reject if 1 or more scratches > 0.1mm
+    - type: "crack"
+      action: "always_reject"
+    - type: "discoloration"
+      threshold_percentage: 5  # reject if >5% of surface affected
+  
+  pass_criteria:
+    min_visible_surface_mm2: 8000
+    max_defect_coverage_percent: 2
+
+# Output & Rejection
+output:
+  rejection_signal:
+    type: "air_nozzle"
+    duration_ms: 500
+    pressure_psi: 80
+  
+  logging:
+    save_failed_images: true
+    save_difference_maps: true
+    output_directory: "defect_logs/"
+    
+  database:
+    log_to_database: true
+    connection: "fault_database"
